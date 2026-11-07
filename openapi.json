@@ -1,0 +1,1117 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Exoma Care — API de cupones",
+    "version": "2.0.0",
+    "description": "Versión desplegada y validada manualmente por el equipo. Autenticación por grupo mediante X-API-Key. No enviar p_grupo_id ni claves elevadas de Supabase. Consumo de backend a backend. La clave identifica al grupo, no al gerente/médico. Swagger permite pruebas manuales controladas; guardar claves en el backend, no en React. Rutas desconocidas responden 404 y métodos no admitidos 405. No hay idempotencia de escritura. Límite de cuerpo: 16 KiB. Respuestas 5xx/429 adicionales pueden provenir del gateway de Supabase."
+  },
+  "servers": [
+    {
+      "url": "https://vekuhonbpqtzakqbcoph.supabase.co/functions/v1/cupones-api",
+      "description": "API compartida de cupones"
+    }
+  ],
+  "security": [
+    {
+      "GroupApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Consulta"
+    },
+    {
+      "name": "Operaciones"
+    }
+  ],
+  "paths": {
+    "/generar_cupones_gerencia": {
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "operationId": "generar_cupones_gerencia",
+        "summary": "Generar lote",
+        "description": "Crea entre 1 y 1000 cupones disponibles. Un gerente por grupo. Vencimiento automático a 30 días según CURRENT_DATE de PostgreSQL. Descuento positivo; el SQL actual no limita a 100. Repetir la solicitud crea otro lote.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/generar_cupones_gerencia_entrada"
+              },
+              "example": {
+                "p_gerente_id": "G-1234",
+                "p_cantidad": 2,
+                "p_porcentaje_descuento": 20
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación realizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Generados"
+                },
+                "example": [
+                  {
+                    "codigo_cupon": "8a4b2c9f",
+                    "porcentaje": 20
+                  },
+                  {
+                    "codigo_cupon": "1d9e4f2a",
+                    "porcentaje": 20
+                  }
+                ]
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida, campos desconocidos, p_grupo_id enviado por el cliente, cupón vencido o estado no habilitado. Ver reglas de la operación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP400",
+                  "message": "Campos incorrectos. No envíes p_grupo_id.",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "X-API-Key ausente, inválida o revocada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP401",
+                  "message": "Clave ausente, inválida o revocada",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "El grupo ya pertenece a otro gerente (PT403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT403",
+                  "message": "El grupo ya está administrado por otro gerente",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo mayor a 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP413",
+                  "message": "El cuerpo supera 16 KiB",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP415",
+                  "message": "Usá Content-Type: application/json",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible o error interno de base. El servicio oculta detalles internos. No reintentar escrituras automáticamente: un timeout no garantiza que la operación se haya revertido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP503",
+                  "message": "Servicio temporalmente no disponible",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método no permitido para esta ruta. El header Allow indica el método admitido.",
+            "headers": {
+              "Allow": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP405",
+                  "message": "Método no permitido",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/asignar_cupon_a_medico": {
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "operationId": "asignar_cupon_a_medico",
+        "summary": "Asignar un cupón al médico",
+        "description": "Recibe un código específico del stock del gerente. Comprueba grupo, gerente, vencimiento y estado disponible. Cambia a medico. No verifica la existencia del médico en la aplicación consumidora.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/asignar_cupon_a_medico_entrada"
+              },
+              "example": {
+                "p_gerente_id": "G-1234",
+                "p_medico_id": "M-5678",
+                "p_codigo": "8a4b2c9f"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación realizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                },
+                "example": true
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida, campos desconocidos, p_grupo_id enviado por el cliente, cupón vencido o estado no habilitado. Ver reglas de la operación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP400",
+                  "message": "Campos incorrectos. No envíes p_grupo_id.",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "X-API-Key ausente, inválida o revocada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP401",
+                  "message": "Clave ausente, inválida o revocada",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cupón no encontrado o no pertenece al grupo/actor indicado (PT404).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT404",
+                  "message": "Cupón no encontrado para este paciente en el grupo",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo mayor a 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP413",
+                  "message": "El cuerpo supera 16 KiB",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP415",
+                  "message": "Usá Content-Type: application/json",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible o error interno de base. El servicio oculta detalles internos. No reintentar escrituras automáticamente: un timeout no garantiza que la operación se haya revertido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP503",
+                  "message": "Servicio temporalmente no disponible",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método no permitido para esta ruta. El header Allow indica el método admitido.",
+            "headers": {
+              "Allow": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP405",
+                  "message": "Método no permitido",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/asignar_cupon_a_paciente": {
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "operationId": "asignar_cupon_a_paciente",
+        "summary": "Asignar un cupón al paciente",
+        "description": "Recibe un código específico en estado medico. Valida pertenencia y vencimiento. Rechaza si el paciente tiene cualquier cupón previo en el grupo, incluso usado. Cambia a paciente. No valida existencia del paciente en la app consumidora.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/asignar_cupon_a_paciente_entrada"
+              },
+              "example": {
+                "p_medico_id": "M-5678",
+                "p_paciente_id": "P-9012",
+                "p_codigo": "8a4b2c9f"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación realizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                },
+                "example": true
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida, campos desconocidos, p_grupo_id enviado por el cliente, cupón vencido o estado no habilitado. Ver reglas de la operación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP400",
+                  "message": "Campos incorrectos. No envíes p_grupo_id.",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "X-API-Key ausente, inválida o revocada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP401",
+                  "message": "Clave ausente, inválida o revocada",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cupón no encontrado o no pertenece al grupo/actor indicado (PT404).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT404",
+                  "message": "Cupón no encontrado para este paciente en el grupo",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Cupón ya usado o paciente con cupón previo en el grupo (PT409).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT409",
+                  "message": "Cupón ya canjeado",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo mayor a 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP413",
+                  "message": "El cuerpo supera 16 KiB",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP415",
+                  "message": "Usá Content-Type: application/json",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible o error interno de base. El servicio oculta detalles internos. No reintentar escrituras automáticamente: un timeout no garantiza que la operación se haya revertido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP503",
+                  "message": "Servicio temporalmente no disponible",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método no permitido para esta ruta. El header Allow indica el método admitido.",
+            "headers": {
+              "Allow": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP405",
+                  "message": "Método no permitido",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/canjear_cupon": {
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "operationId": "canjear_cupon",
+        "summary": "Canjear cupón",
+        "description": "Bloquea la fila, comprueba grupo, paciente, estado y vencimiento y registra el uso. Fecha igual al día actual de PostgreSQL todavía es válida. Segundo canje devuelve 409. No efectúa pagos ni aplica un descuento en un proveedor externo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/canjear_cupon_entrada"
+              },
+              "example": {
+                "p_paciente_id": "P-9012",
+                "p_codigo": "8a4b2c9f"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operación realizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                },
+                "example": true
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida, campos desconocidos, p_grupo_id enviado por el cliente, cupón vencido o estado no habilitado. Ver reglas de la operación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP400",
+                  "message": "Campos incorrectos. No envíes p_grupo_id.",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "X-API-Key ausente, inválida o revocada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP401",
+                  "message": "Clave ausente, inválida o revocada",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cupón no encontrado o no pertenece al grupo/actor indicado (PT404).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT404",
+                  "message": "Cupón no encontrado para este paciente en el grupo",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Cupón ya usado o paciente con cupón previo en el grupo (PT409).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "PT409",
+                  "message": "Cupón ya canjeado",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo mayor a 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP413",
+                  "message": "El cuerpo supera 16 KiB",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP415",
+                  "message": "Usá Content-Type: application/json",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible o error interno de base. El servicio oculta detalles internos. No reintentar escrituras automáticamente: un timeout no garantiza que la operación se haya revertido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP503",
+                  "message": "Servicio temporalmente no disponible",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método no permitido para esta ruta. El header Allow indica el método admitido.",
+            "headers": {
+              "Allow": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP405",
+                  "message": "Método no permitido",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cupones": {
+      "get": {
+        "tags": [
+          "Consulta"
+        ],
+        "operationId": "listarCupones",
+        "summary": "Consultar cupones y estados del grupo",
+        "description": "Grupo derivado de X-API-Key. Orden ascendente por UUID id. Filtros opcionales combinados. total cuenta filas filtradas. Lista vacía devuelve 200. Estado disponible puede incluir vencidos: consultar fecha_vencimiento. No admite filtros desconocidos ni repetidos. La aplicación consumidora debe autorizar a su gerente.",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "disponible",
+                "medico",
+                "paciente",
+                "usado"
+              ]
+            },
+            "description": "Omitir para consultar todos los estados."
+          },
+          {
+            "name": "medico_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "description": "Filtro dentro del grupo autenticado; no autentica al actor."
+          },
+          {
+            "name": "gerente_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "description": "Filtro dentro del grupo autenticado; no autentica al actor."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página del grupo autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listado"
+                },
+                "example": {
+                  "items": [],
+                  "total": 0,
+                  "limit": 20,
+                  "offset": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Solicitud inválida, campos desconocidos, p_grupo_id enviado por el cliente, cupón vencido o estado no habilitado. Ver reglas de la operación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP400",
+                  "message": "Campos incorrectos. No envíes p_grupo_id.",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "X-API-Key ausente, inválida o revocada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP401",
+                  "message": "Clave ausente, inválida o revocada",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependencia no disponible o error interno de base. El servicio oculta detalles internos. No reintentar escrituras automáticamente: un timeout no garantiza que la operación se haya revertido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP503",
+                  "message": "Servicio temporalmente no disponible",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Método no permitido para esta ruta. El header Allow indica el método admitido.",
+            "headers": {
+              "Allow": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": "HTTP405",
+                  "message": "Método no permitido",
+                  "details": null,
+                  "hint": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "GroupApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Clave ecg_ emitida para tu grupo. No usar service_role."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "details",
+          "hint"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string",
+            "nullable": true
+          },
+          "hint": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Cupon": {
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "estado",
+          "gerente_id",
+          "medico_id",
+          "paciente_id",
+          "porcentaje_descuento",
+          "fecha_vencimiento",
+          "fecha_uso"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "medico",
+              "paciente",
+              "usado"
+            ]
+          },
+          "gerente_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "medico_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "paciente_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "porcentaje_descuento": {
+            "type": "number",
+            "nullable": true
+          },
+          "fecha_vencimiento": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "fecha_uso": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Listado": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cupon"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Generados": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "codigo_cupon",
+            "porcentaje"
+          ],
+          "properties": {
+            "codigo_cupon": {
+              "type": "string"
+            },
+            "porcentaje": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "generar_cupones_gerencia_entrada": {
+        "type": "object",
+        "required": [
+          "p_gerente_id",
+          "p_cantidad",
+          "p_porcentaje_descuento"
+        ],
+        "properties": {
+          "p_gerente_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_cantidad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "p_porcentaje_descuento": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "asignar_cupon_a_medico_entrada": {
+        "type": "object",
+        "required": [
+          "p_gerente_id",
+          "p_medico_id",
+          "p_codigo"
+        ],
+        "properties": {
+          "p_gerente_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_medico_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_codigo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "asignar_cupon_a_paciente_entrada": {
+        "type": "object",
+        "required": [
+          "p_medico_id",
+          "p_paciente_id",
+          "p_codigo"
+        ],
+        "properties": {
+          "p_medico_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_paciente_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_codigo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "canjear_cupon_entrada": {
+        "type": "object",
+        "required": [
+          "p_paciente_id",
+          "p_codigo"
+        ],
+        "properties": {
+          "p_paciente_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "p_codigo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
